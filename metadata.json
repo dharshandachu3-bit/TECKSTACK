@@ -1,0 +1,6 @@
+{
+  "name": "WorkFlowOS - AI Workflow Automation",
+  "description": "Autonomous AI-powered workflow discovery and execution platform that learns repetitive digital work across apps and generates reliable automations.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

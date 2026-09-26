@@ -1,0 +1,275 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Default deny all access
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Helper functions
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isAdmin() {
+      return isSignedIn() && (
+        (request.auth.token.email == 'dharshandachu3@gmail.com' && request.auth.token.email_verified == true) ||
+        exists(/databases/$(database)/documents/admins/$(request.auth.uid))
+      );
+    }
+
+    // Validation Blueprint for UserProfile
+    function isValidUserProfile(data) {
+      return data.id is string && data.id.size() <= 128 &&
+             data.email is string && data.email.size() <= 256 &&
+             data.name is string && data.name.size() <= 128 &&
+             data.role in ['ADMIN', 'ENGINEER', 'OPERATOR'] &&
+             data.createdAt is string && data.createdAt.size() <= 64 &&
+             data.updatedAt is string && data.updatedAt.size() <= 64;
+    }
+
+    // Validation Blueprint for Workflow
+    function isValidWorkflow(data) {
+      return data.id is string && data.id.size() <= 128 &&
+             data.userId is string && data.userId.size() <= 128 &&
+             data.name is string && data.name.size() <= 200 &&
+             data.category is string && data.category.size() <= 100 &&
+             data.status in ['DRAFT', 'PENDING_APPROVAL', 'APPROVED', 'ACTIVE', 'PAUSED', 'ARCHIVED'] &&
+             data.version is int &&
+             data.createdAt is string && data.createdAt.size() <= 64 &&
+             data.updatedAt is string && data.updatedAt.size() <= 64;
+    }
+
+    // Validation Blueprint for WorkflowCandidate
+    function isValidCandidate(data) {
+      return data.id is string && data.id.size() <= 128 &&
+             data.userId is string && data.userId.size() <= 128 &&
+             data.name is string && data.name.size() <= 200 &&
+             data.intent is string && data.intent.size() <= 500 &&
+             data.frequency is int &&
+             data.status in ['DISCOVERED', 'REVIEWING', 'ACCEPTED', 'REJECTED'] &&
+             data.discoveredAt is string && data.discoveredAt.size() <= 64;
+    }
+
+    // Validation Blueprint for ActivityEvent
+    function isValidActivityEvent(data) {
+      return data.id is string && data.id.size() <= 128 &&
+             data.userId is string && data.userId.size() <= 128 &&
+             data.application is string && data.application.size() <= 64 &&
+             data.eventType is string && data.eventType.size() <= 64 &&
+             data.action is string && data.action.size() <= 200 &&
+             data.target is string && data.target.size() <= 500 &&
+             data.timestamp is string && data.timestamp.size() <= 64;
+    }
+
+    // Validation Blueprint for Automation
+    function isValidAutomation(data) {
+      return data.id is string && data.id.size() <= 128 &&
+             data.userId is string && data.userId.size() <= 128 &&
+             data.workflowId is string && data.workflowId.size() <= 128 &&
+             data.name is string && data.name.size() <= 200 &&
+             data.triggerType in ['EVENT_BASED', 'SCHEDULED', 'WEBHOOK'] &&
+             data.status in ['ACTIVE', 'PAUSED', 'ERROR'];
+    }
+
+    // Validation Blueprint for Execution
+    function isValidExecution(data) {
+      return data.id is string && data.id.size() <= 128 &&
+             data.userId is string && data.userId.size() <= 128 &&
+             data.workflowId is string && data.workflowId.size() <= 128 &&
+             data.workflowName is string && data.workflowName.size() <= 200 &&
+             data.status in ['QUEUED', 'RUNNING', 'WAITING', 'SUCCESS', 'FAILED', 'CANCELLED'] &&
+             data.startTime is string && data.startTime.size() <= 64;
+    }
+
+    // Validation Blueprint for Integration
+    function isValidIntegration(data) {
+      return data.id is string && data.id.size() <= 128 &&
+             data.userId is string && data.userId.size() <= 128 &&
+             data.type in ['GMAIL', 'SLACK', 'CRM', 'SHEETS', 'BROWSER'] &&
+             data.name is string && data.name.size() <= 100 &&
+             data.application is string && data.application.size() <= 64 &&
+             data.status in ['CONNECTED', 'SIMULATED', 'DISCONNECTED'] &&
+             data.authType in ['OAUTH2', 'API_KEY', 'SIMULATED_MOCK'];
+    }
+
+    // Validation Blueprint for Notification
+    function isValidNotification(data) {
+      return data.id is string && data.id.size() <= 128 &&
+             data.userId is string && data.userId.size() <= 128 &&
+             data.type in ['WORKFLOW_DISCOVERED', 'WORKFLOW_APPROVED', 'AUTOMATION_FAILED', 'APPROVAL_REQUIRED', 'EXECUTION_COMPLETED'] &&
+             data.title is string && data.title.size() <= 200 &&
+             data.message is string && data.message.size() <= 1000 &&
+             data.read is bool &&
+             data.createdAt is string && data.createdAt.size() <= 64;
+    }
+
+    // Validation Blueprint for UserSetting
+    function isValidUserSetting(data) {
+      return data.id is string && data.id.size() <= 128 &&
+             data.userId is string && data.userId.size() <= 128 &&
+             data.activityMonitoringEnabled is bool &&
+             data.aiDiscoveryEnabled is bool;
+    }
+
+    // Admins collection
+    match /admins/{adminId} {
+      allow read: if isSignedIn();
+      allow write: if false; // Managed out-of-band or by bootstrap
+    }
+
+    // User Profile Document
+    match /users/{userId} {
+      allow get: if isOwner(userId) || isAdmin();
+      allow list: if isAdmin();
+      allow create: if isOwner(userId) &&
+                       isValidId(userId) &&
+                       isValidUserProfile(incoming()) &&
+                       incoming().id == userId &&
+                       (incoming().role == 'OPERATOR' || isAdmin());
+      allow update: if (isOwner(userId) || isAdmin()) &&
+                       isValidId(userId) &&
+                       isValidUserProfile(incoming()) &&
+                       incoming().id == userId &&
+                       (isAdmin() || incoming().role == existing().role);
+      allow delete: if isAdmin();
+
+      // WORKFLOWS subcollection (Master Gate: belongs to userId)
+      match /workflows/{workflowId} {
+        allow get, list: if isOwner(userId) || isAdmin();
+        allow create: if (isOwner(userId) || isAdmin()) &&
+                         isValidId(workflowId) &&
+                         isValidWorkflow(incoming()) &&
+                         incoming().userId == userId;
+        allow update: if (isOwner(userId) || isAdmin()) &&
+                         isValidId(workflowId) &&
+                         isValidWorkflow(incoming()) &&
+                         incoming().userId == userId &&
+                         incoming().id == existing().id &&
+                         incoming().createdAt == existing().createdAt;
+        allow delete: if isOwner(userId) || isAdmin();
+      }
+
+      // CANDIDATES subcollection
+      match /workflowCandidates/{candidateId} {
+        allow get, list: if isOwner(userId) || isAdmin();
+        allow create: if (isOwner(userId) || isAdmin()) &&
+                         isValidId(candidateId) &&
+                         isValidCandidate(incoming()) &&
+                         incoming().userId == userId;
+        allow update: if (isOwner(userId) || isAdmin()) &&
+                         isValidId(candidateId) &&
+                         isValidCandidate(incoming()) &&
+                         incoming().userId == userId &&
+                         incoming().id == existing().id;
+        allow delete: if isOwner(userId) || isAdmin();
+      }
+
+      // ACTIVITY EVENTS subcollection
+      match /activityEvents/{eventId} {
+        allow get, list: if isOwner(userId) || isAdmin();
+        allow create: if (isOwner(userId) || isAdmin()) &&
+                         isValidId(eventId) &&
+                         isValidActivityEvent(incoming()) &&
+                         incoming().userId == userId;
+        allow update: if false; // Events are immutable append-only logs
+        allow delete: if isOwner(userId) || isAdmin();
+      }
+
+      // AUTOMATIONS subcollection
+      match /automations/{automationId} {
+        allow get, list: if isOwner(userId) || isAdmin();
+        allow create: if (isOwner(userId) || isAdmin()) &&
+                         isValidId(automationId) &&
+                         isValidAutomation(incoming()) &&
+                         incoming().userId == userId;
+        allow update: if (isOwner(userId) || isAdmin()) &&
+                         isValidId(automationId) &&
+                         isValidAutomation(incoming()) &&
+                         incoming().userId == userId &&
+                         incoming().id == existing().id;
+        allow delete: if isOwner(userId) || isAdmin();
+      }
+
+      // EXECUTIONS subcollection
+      match /executions/{executionId} {
+        allow get, list: if isOwner(userId) || isAdmin();
+        allow create: if (isOwner(userId) || isAdmin()) &&
+                         isValidId(executionId) &&
+                         isValidExecution(incoming()) &&
+                         incoming().userId == userId;
+        allow update: if (isOwner(userId) || isAdmin()) &&
+                         isValidId(executionId) &&
+                         isValidExecution(incoming()) &&
+                         incoming().userId == userId &&
+                         incoming().id == existing().id &&
+                         // Terminal state protection: terminal executions cannot be altered
+                         (existing().status != 'SUCCESS' && existing().status != 'FAILED' || isAdmin());
+        allow delete: if isOwner(userId) || isAdmin();
+      }
+
+      // INTEGRATIONS subcollection
+      match /integrations/{integrationId} {
+        allow get, list: if isOwner(userId) || isAdmin();
+        allow create: if (isOwner(userId) || isAdmin()) &&
+                         isValidId(integrationId) &&
+                         isValidIntegration(incoming()) &&
+                         incoming().userId == userId;
+        allow update: if (isOwner(userId) || isAdmin()) &&
+                         isValidId(integrationId) &&
+                         isValidIntegration(incoming()) &&
+                         incoming().userId == userId &&
+                         incoming().id == existing().id;
+        allow delete: if isOwner(userId) || isAdmin();
+      }
+
+      // NOTIFICATIONS subcollection
+      match /notifications/{notificationId} {
+        allow get, list: if isOwner(userId) || isAdmin();
+        allow create: if (isOwner(userId) || isAdmin()) &&
+                         isValidId(notificationId) &&
+                         isValidNotification(incoming()) &&
+                         incoming().userId == userId;
+        allow update: if (isOwner(userId) || isAdmin()) &&
+                         isValidId(notificationId) &&
+                         isValidNotification(incoming()) &&
+                         incoming().userId == userId &&
+                         incoming().id == existing().id;
+        allow delete: if isOwner(userId) || isAdmin();
+      }
+
+      // SETTINGS subcollection
+      match /settings/{settingId} {
+        allow get, list: if isOwner(userId) || isAdmin();
+        allow create: if (isOwner(userId) || isAdmin()) &&
+                         isValidId(settingId) &&
+                         isValidUserSetting(incoming()) &&
+                         incoming().userId == userId;
+        allow update: if (isOwner(userId) || isAdmin()) &&
+                         isValidId(settingId) &&
+                         isValidUserSetting(incoming()) &&
+                         incoming().userId == userId &&
+                         incoming().id == existing().id;
+        allow delete: if isOwner(userId) || isAdmin();
+      }
+    }
+  }
+}

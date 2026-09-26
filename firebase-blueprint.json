@@ -1,0 +1,202 @@
+{
+  "entities": {
+    "UserProfile": {
+      "title": "User Profile",
+      "description": "User profile with authentication and role information",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "User UID", "maxLength": 128 },
+        "email": { "type": "string", "description": "User email address", "maxLength": 256 },
+        "name": { "type": "string", "description": "Display name", "maxLength": 128 },
+        "role": { "type": "string", "enum": ["ADMIN", "ENGINEER", "OPERATOR"], "description": "User access role" },
+        "avatarUrl": { "type": "string", "description": "Avatar photo URL", "maxLength": 1024 },
+        "createdAt": { "type": "string", "format": "date-time", "description": "ISO timestamp" },
+        "updatedAt": { "type": "string", "format": "date-time", "description": "ISO timestamp" }
+      },
+      "required": ["id", "email", "name", "role", "createdAt", "updatedAt"]
+    },
+    "Workflow": {
+      "title": "Workflow",
+      "description": "Automated workflow definition containing trigger, conditions, and steps",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Unique workflow ID", "maxLength": 128 },
+        "userId": { "type": "string", "description": "Owner user UID", "maxLength": 128 },
+        "candidateId": { "type": "string", "description": "Originating candidate ID if discovered", "maxLength": 128 },
+        "name": { "type": "string", "description": "Name of the workflow", "maxLength": 200 },
+        "description": { "type": "string", "description": "Description of the workflow", "maxLength": 1000 },
+        "category": { "type": "string", "description": "Category folder", "maxLength": 100 },
+        "version": { "type": "integer", "description": "Version number" },
+        "status": { "type": "string", "enum": ["DRAFT", "PENDING_APPROVAL", "APPROVED", "ACTIVE", "PAUSED", "ARCHIVED"], "description": "Lifecycle status" },
+        "createdAt": { "type": "string", "format": "date-time", "description": "ISO timestamp" },
+        "updatedAt": { "type": "string", "format": "date-time", "description": "ISO timestamp" },
+        "totalExecutions": { "type": "integer", "description": "Execution counter" },
+        "successRate": { "type": "number", "description": "Success rate 0 to 1" }
+      },
+      "required": ["id", "userId", "name", "category", "status", "version", "createdAt", "updatedAt"]
+    },
+    "WorkflowCandidate": {
+      "title": "Workflow Candidate",
+      "description": "AI-discovered repetitive task pattern candidate for workflow automation",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Candidate ID", "maxLength": 128 },
+        "userId": { "type": "string", "description": "User ID", "maxLength": 128 },
+        "name": { "type": "string", "description": "Candidate title", "maxLength": 200 },
+        "intent": { "type": "string", "description": "AI-inferred intention", "maxLength": 500 },
+        "frequency": { "type": "integer", "description": "Repetitions observed" },
+        "similarity": { "type": "number", "description": "Pattern similarity 0-1" },
+        "crossAppTransitions": { "type": "integer", "description": "Count of app switches" },
+        "avgDurationSecs": { "type": "number", "description": "Average duration" },
+        "confidenceScore": { "type": "number", "description": "AI discovery confidence" },
+        "estimatedWeeklyTimeSavedSecs": { "type": "number", "description": "Estimated time savings" },
+        "status": { "type": "string", "enum": ["DISCOVERED", "REVIEWING", "ACCEPTED", "REJECTED"], "description": "Review status" },
+        "discoveredAt": { "type": "string", "format": "date-time", "description": "Discovery timestamp" }
+      },
+      "required": ["id", "userId", "name", "intent", "frequency", "status", "discoveredAt"]
+    },
+    "ActivityEvent": {
+      "title": "Activity Event",
+      "description": "Recorded desktop or browser activity event telemetry",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Event ID", "maxLength": 128 },
+        "userId": { "type": "string", "description": "User ID", "maxLength": 128 },
+        "sessionId": { "type": "string", "description": "Session ID", "maxLength": 128 },
+        "timestamp": { "type": "string", "format": "date-time", "description": "Timestamp" },
+        "source": { "type": "string", "maxLength": 64 },
+        "application": { "type": "string", "maxLength": 64 },
+        "eventType": { "type": "string", "maxLength": 64 },
+        "action": { "type": "string", "maxLength": 200 },
+        "target": { "type": "string", "maxLength": 500 },
+        "isSimulated": { "type": "boolean" },
+        "sensitiveDataScrubbed": { "type": "boolean" }
+      },
+      "required": ["id", "userId", "timestamp", "application", "eventType", "action", "target"]
+    },
+    "Automation": {
+      "title": "Automation",
+      "description": "Deployed recurring or event-based automation trigger for a workflow",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Automation ID", "maxLength": 128 },
+        "userId": { "type": "string", "description": "User ID", "maxLength": 128 },
+        "workflowId": { "type": "string", "description": "Target workflow ID", "maxLength": 128 },
+        "name": { "type": "string", "description": "Automation name", "maxLength": 200 },
+        "triggerType": { "type": "string", "enum": ["EVENT_BASED", "SCHEDULED", "WEBHOOK"] },
+        "scheduleCron": { "type": "string", "maxLength": 64 },
+        "status": { "type": "string", "enum": ["ACTIVE", "PAUSED", "ERROR"] },
+        "totalRuns": { "type": "integer" },
+        "successfulRuns": { "type": "integer" },
+        "failedRuns": { "type": "integer" },
+        "timeSavedSeconds": { "type": "number" }
+      },
+      "required": ["id", "userId", "workflowId", "name", "triggerType", "status"]
+    },
+    "Execution": {
+      "title": "Execution",
+      "description": "Run log and step-by-step trace of a workflow execution",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Execution ID", "maxLength": 128 },
+        "userId": { "type": "string", "description": "User ID", "maxLength": 128 },
+        "workflowId": { "type": "string", "description": "Workflow ID", "maxLength": 128 },
+        "workflowName": { "type": "string", "maxLength": 200 },
+        "status": { "type": "string", "enum": ["QUEUED", "RUNNING", "WAITING", "SUCCESS", "FAILED", "CANCELLED"] },
+        "startTime": { "type": "string", "format": "date-time" },
+        "endTime": { "type": "string", "format": "date-time" },
+        "durationMs": { "type": "number" },
+        "timeSavedSeconds": { "type": "number" },
+        "currentStepIndex": { "type": "integer" }
+      },
+      "required": ["id", "userId", "workflowId", "workflowName", "status", "startTime"]
+    },
+    "Integration": {
+      "title": "Integration",
+      "description": "Connected third-party tool integration",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Integration ID", "maxLength": 128 },
+        "userId": { "type": "string", "description": "User ID", "maxLength": 128 },
+        "type": { "type": "string", "enum": ["GMAIL", "SLACK", "CRM", "SHEETS", "BROWSER"] },
+        "name": { "type": "string", "maxLength": 100 },
+        "application": { "type": "string", "maxLength": 64 },
+        "status": { "type": "string", "enum": ["CONNECTED", "SIMULATED", "DISCONNECTED"] },
+        "authType": { "type": "string", "enum": ["OAUTH2", "API_KEY", "SIMULATED_MOCK"] },
+        "latencyMs": { "type": "number" }
+      },
+      "required": ["id", "userId", "type", "name", "application", "status", "authType"]
+    },
+    "Notification": {
+      "title": "Notification",
+      "description": "System and agent notifications for the user",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Notification ID", "maxLength": 128 },
+        "userId": { "type": "string", "description": "User ID", "maxLength": 128 },
+        "type": { "type": "string", "enum": ["WORKFLOW_DISCOVERED", "WORKFLOW_APPROVED", "AUTOMATION_FAILED", "APPROVAL_REQUIRED", "EXECUTION_COMPLETED"] },
+        "title": { "type": "string", "maxLength": 200 },
+        "message": { "type": "string", "maxLength": 1000 },
+        "link": { "type": "string", "maxLength": 256 },
+        "read": { "type": "boolean" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "userId", "type", "title", "message", "read", "createdAt"]
+    },
+    "UserSetting": {
+      "title": "User Setting",
+      "description": "User configuration preferences for WorkFlowOS",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Settings doc ID", "maxLength": 128 },
+        "userId": { "type": "string", "description": "User ID", "maxLength": 128 },
+        "activityMonitoringEnabled": { "type": "boolean" },
+        "aiDiscoveryEnabled": { "type": "boolean" },
+        "autoSuggestionsEnabled": { "type": "boolean" },
+        "requireApprovalDefault": { "type": "boolean" },
+        "sensitiveDataFilterEnabled": { "type": "boolean" },
+        "retentionDays": { "type": "integer" },
+        "aiModelPreference": { "type": "string", "enum": ["gemini-2.5-flash", "mock-offline"] }
+      },
+      "required": ["id", "userId", "activityMonitoringEnabled", "aiDiscoveryEnabled"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": { "$ref": "#/entities/UserProfile" },
+      "description": "User profile with role and identity"
+    },
+    "/users/{userId}/workflows/{workflowId}": {
+      "schema": { "$ref": "#/entities/Workflow" },
+      "description": "User created or approved workflows"
+    },
+    "/users/{userId}/workflowCandidates/{candidateId}": {
+      "schema": { "$ref": "#/entities/WorkflowCandidate" },
+      "description": "AI discovered workflow candidate patterns"
+    },
+    "/users/{userId}/activityEvents/{eventId}": {
+      "schema": { "$ref": "#/entities/ActivityEvent" },
+      "description": "Activity monitoring stream events"
+    },
+    "/users/{userId}/automations/{automationId}": {
+      "schema": { "$ref": "#/entities/Automation" },
+      "description": "Scheduled and event-driven automations"
+    },
+    "/users/{userId}/executions/{executionId}": {
+      "schema": { "$ref": "#/entities/Execution" },
+      "description": "Workflow execution run history and step statuses"
+    },
+    "/users/{userId}/integrations/{integrationId}": {
+      "schema": { "$ref": "#/entities/Integration" },
+      "description": "Connected app integrations"
+    },
+    "/users/{userId}/notifications/{notificationId}": {
+      "schema": { "$ref": "#/entities/Notification" },
+      "description": "In-app notifications"
+    },
+    "/users/{userId}/settings/{settingId}": {
+      "schema": { "$ref": "#/entities/UserSetting" },
+      "description": "User preferences and system configuration"
+    }
+  }
+}

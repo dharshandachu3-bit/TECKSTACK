@@ -1,0 +1,354 @@
+// WorkFlowOS Prisma Schema
+// PostgreSQL Database Schema for Autonomous Workflow Discovery & Execution
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+enum UserRole {
+  ADMIN
+  ENGINEER
+  OPERATOR
+}
+
+enum CandidateStatus {
+  DISCOVERED
+  REVIEWING
+  ACCEPTED
+  REJECTED
+}
+
+enum WorkflowStatus {
+  DRAFT
+  PENDING_APPROVAL
+  APPROVED
+  ACTIVE
+  PAUSED
+  ARCHIVED
+}
+
+enum StepType {
+  TRIGGER
+  ACTION
+  CONDITION
+  WAIT
+  HUMAN_APPROVAL
+}
+
+enum ExecutionMethod {
+  API
+  APPLICATION
+  SEMANTIC_UI
+  BROWSER_AUTOMATION
+  COMPUTER_VISION
+}
+
+enum ExecutionStatus {
+  QUEUED
+  RUNNING
+  WAITING
+  SUCCESS
+  FAILED
+  CANCELLED
+}
+
+enum StepStatus {
+  PENDING
+  RUNNING
+  SUCCESS
+  FAILED
+  SKIPPED
+  WAITING_APPROVAL
+}
+
+enum IntegrationType {
+  GMAIL
+  SLACK
+  CRM
+  SHEETS
+  BROWSER
+}
+
+enum IntegrationStatus {
+  CONNECTED
+  SIMULATED
+  DISCONNECTED
+}
+
+model User {
+  id                String             @id @default(uuid())
+  email             String             @unique
+  passwordHash      String
+  name              String
+  role              UserRole           @default(OPERATOR)
+  avatarUrl         String?
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
+
+  sessions          Session[]
+  activityEvents    ActivityEvent[]
+  candidates        WorkflowCandidate[]
+  workflows         Workflow[]
+  integrations      Integration[]
+  automations       Automation[]
+  executions        Execution[]
+  notifications     Notification[]
+  settings          UserSetting?
+
+  @@map("users")
+}
+
+model Session {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  token     String   @unique
+  expiresAt DateTime
+  ipAddress String?
+  userAgent String?
+  createdAt DateTime @default(now())
+
+  @@map("sessions")
+}
+
+model ActivityEvent {
+  id                     String   @id @default(uuid())
+  userId                 String
+  user                   User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  sessionId              String
+  timestamp              DateTime @default(now())
+  source                 String   // PROTOTYPE_SIMULATOR | DESKTOP_AGENT | BROWSER_EXTENSION
+  application            String   // Gmail | Slack | CRM | Sheets | Chrome
+  eventType              String   // APPLICATION_OPENED | EMAIL_OPENED | etc.
+  action                 String
+  target                 String
+  metadata               Json     @default("{}")
+  isSimulated            Boolean  @default(true)
+  sensitiveDataScrubbed  Boolean  @default(false)
+
+  @@index([userId, timestamp])
+  @@index([sessionId])
+  @@map("activity_events")
+}
+
+model WorkflowCandidate {
+  id                           String          @id @default(uuid())
+  userId                       String
+  user                         User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name                         String
+  intent                       String
+  applications                 String[]
+  frequency                    Int
+  similarity                   Float           // 0.0 - 1.0
+  crossAppTransitions          Int
+  avgDurationSecs              Int
+  confidenceScore              Float           // 0.0 - 1.0
+  estimatedWeeklyTimeSavedSecs Int
+  status                       CandidateStatus @default(DISCOVERED)
+  discoveredAt                 DateTime        @default(now())
+  reviewedAt                   DateTime?
+  rawSequence                  Json
+  aiAnalysisId                 String?
+  aiAnalysis                   AIAnalysis?     @relation(fields: [aiAnalysisId], references: [id])
+  workflows                    Workflow[]
+
+  @@map("workflow_candidates")
+}
+
+model Workflow {
+  id              String           @id @default(uuid())
+  userId          String
+  user            User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  candidateId     String?
+  candidate       WorkflowCandidate? @relation(fields: [candidateId], references: [id])
+  name            String
+  description     String
+  category        String           @default("General Operations")
+  trigger         Json
+  conditions      Json             @default("[]")
+  variables       Json             @default("[]")
+  version         Int              @default(1)
+  status          WorkflowStatus   @default(DRAFT)
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+
+  versions        WorkflowVersion[]
+  steps           WorkflowStep[]
+  automations     Automation[]
+  executions      Execution[]
+
+  @@map("workflows")
+}
+
+model WorkflowVersion {
+  id                 String   @id @default(uuid())
+  workflowId         String
+  workflow           Workflow @relation(fields: [workflowId], references: [id], onDelete: Cascade)
+  versionNumber      Int
+  stepsSnapshot      Json
+  triggerSnapshot    Json
+  conditionsSnapshot Json
+  changedBy          String
+  changelog          String
+  createdAt          DateTime @default(now())
+
+  @@unique([workflowId, versionNumber])
+  @@map("workflow_versions")
+}
+
+model WorkflowStep {
+  id                      String          @id @default(uuid())
+  workflowId              String
+  workflow                Workflow        @relation(fields: [workflowId], references: [id], onDelete: Cascade)
+  stepIndex               Int
+  name                    String
+  type                    StepType
+  application             String
+  actionType              String
+  parameters              Json            @default("{}")
+  executionMethod         ExecutionMethod @default(API)
+  timeoutMs               Int             @default(30000)
+  conditionTrueNextStepId String?
+  conditionFalseNextStepId String?
+  requiresApprovalPrompt  String?
+
+  @@index([workflowId, stepIndex])
+  @@map("workflow_steps")
+}
+
+model Integration {
+  id           String            @id @default(uuid())
+  userId       String
+  user         User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type         IntegrationType
+  name         String
+  application  String
+  status       IntegrationStatus @default(SIMULATED)
+  config       Json              @default("{}")
+  lastTestedAt DateTime?
+  authType     String            @default("SIMULATED_MOCK")
+  latencyMs    Int?
+
+  @@map("integrations")
+}
+
+model Automation {
+  id                String         @id @default(uuid())
+  userId            String
+  user              User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  workflowId        String
+  workflow          Workflow       @relation(fields: [workflowId], references: [id], onDelete: Cascade)
+  name              String
+  triggerType       String         @default("EVENT_BASED")
+  scheduleCron      String?
+  status            String         @default("ACTIVE") // ACTIVE | PAUSED | ERROR
+  totalRuns         Int            @default(0)
+  successfulRuns    Int            @default(0)
+  failedRuns        Int            @default(0)
+  lastRunAt         DateTime?
+  timeSavedSeconds  Int            @default(0)
+
+  executions        Execution[]
+
+  @@map("automations")
+}
+
+model Execution {
+  id                 String          @id @default(uuid())
+  userId             String
+  user               User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  workflowId         String
+  workflow           Workflow        @relation(fields: [workflowId], references: [id], onDelete: Cascade)
+  automationId       String?
+  automation         Automation?     @relation(fields: [automationId], references: [id])
+  status             ExecutionStatus @default(QUEUED)
+  startTime          DateTime        @default(now())
+  endTime            DateTime?
+  durationMs         Int?
+  triggerData        Json            @default("{}")
+  inputs             Json            @default("{}")
+  outputs            Json            @default("{}")
+  errors             String[]        @default([])
+  timeSavedSeconds   Int             @default(0)
+  currentStepIndex   Int             @default(0)
+  isWaitingApproval  Boolean         @default(false)
+  approvalPayload    Json?
+
+  steps              ExecutionStep[]
+
+  @@map("executions")
+}
+
+model ExecutionStep {
+  id              String          @id @default(uuid())
+  executionId     String
+  execution       Execution       @relation(fields: [executionId], references: [id], onDelete: Cascade)
+  stepId          String
+  stepIndex       Int
+  stepName        String
+  application     String
+  executionMethod ExecutionMethod
+  status          StepStatus      @default(PENDING)
+  startTime       DateTime?
+  endTime         DateTime?
+  durationMs      Int?
+  inputData       Json?
+  outputData      Json?
+  errorDetails    String?
+  retryCount      Int             @default(0)
+
+  @@index([executionId, stepIndex])
+  @@map("execution_steps")
+}
+
+model AIAnalysis {
+  id                  String              @id @default(uuid())
+  rawSequenceHash     String
+  workflowName        String
+  intent              String
+  entities            String[]
+  potentialTrigger    String
+  suggestedConditions String[]
+  confidence          Float
+  modelUsed           String
+  createdAt           DateTime            @default(now())
+
+  candidates          WorkflowCandidate[]
+
+  @@map("ai_analyses")
+}
+
+model Notification {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type      String
+  title     String
+  message   String
+  link      String?
+  read      Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  @@map("notifications")
+}
+
+model UserSetting {
+  id                         String   @id @default(uuid())
+  userId                     String   @unique
+  user                       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  activityMonitoringEnabled  Boolean  @default(true)
+  aiDiscoveryEnabled         Boolean  @default(true)
+  autoSuggestionsEnabled     Boolean  @default(true)
+  requireApprovalDefault     Boolean  @default(true)
+  sensitiveDataFilterEnabled Boolean  @default(true)
+  excludedApps               String[] @default(["Banking", "Password Managers", "Authentication Apps", "Private Messaging"])
+  retentionDays              Int      @default(90)
+  aiModelPreference          String   @default("gemini-2.5-flash")
+
+  @@map("user_settings")
+}
